@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <sstream> // 引入 stringstream
+#include <boost/algorithm/string.hpp> 
 
 namespace ns_util
 {
@@ -30,5 +31,16 @@ namespace ns_util
         // 不需要手动 in.close()，ifstream 析构时会自动关闭
         return true;
     }
+
+    // 增加 StringUtil 类，与上一节 Index 模块的调用保持一致
+    class StringUtil
+    {
+    public:
+        // 1. 将 out 改为引用类型 std::vector<std::string>&
+        static void CutString(const std::string &target, std::vector<std::string> &out, const std::string &sep)
+        {
+            boost::split(out, target, boost::is_any_of(sep), boost::token_compress_on);
+        }
+    };
 
 } // namespace ns_util
