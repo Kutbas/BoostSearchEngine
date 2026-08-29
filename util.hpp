@@ -4,7 +4,8 @@
 #include <string>
 #include <fstream>
 #include <sstream> // 引入 stringstream
-#include <boost/algorithm/string.hpp> 
+#include <boost/algorithm/string.hpp>
+#include "inc/Jieba.hpp" // 通过软链接引入的 jieba 头文件
 
 namespace ns_util
 {
@@ -40,6 +41,35 @@ namespace ns_util
         static void CutString(const std::string &target, std::vector<std::string> &out, const std::string &sep)
         {
             boost::split(out, target, boost::is_any_of(sep), boost::token_compress_on);
+        }
+    };
+
+    // 1. 定义词库的相对路径
+    const char *const DICT_PATH = "./dict/jieba.dict.utf8";
+    const char *const HMM_PATH = "./dict/hmm_model.utf8";
+    const char *const USER_DICT_PATH = "./dict/user.dict.utf8";
+    const char *const IDF_PATH = "./dict/idf.utf8";
+    const char *const STOP_WORD_PATH = "./dict/stop_words.utf8";
+
+    class JiebaUtil
+    {
+    private:
+        // 采用 Meyers Singleton (局部静态变量) 模式
+        // 优势 1：避免头文件多重定义报错
+        // 优势 2：实现懒加载，只有第一次调用 GetJieba() 时才会耗时加载词典
+        // 优势 3：C++11 标准保证了局部静态变量初始化的线程安全性
+        static cppjieba::Jieba &GetJieba()
+        {
+            static cppjieba::Jieba jieba(DICT_PATH, HMM_PATH, USER_DICT_PATH, IDF_PATH, STOP_WORD_PATH);
+            return jieba;
+        }
+
+    public:
+        // 将 out 改为引用类型
+        static void CutString(const std::string &src, std::vector<std::string> &out)
+        {
+            // 调用时通过 GetJieba() 获取实例
+            GetJieba().CutForSearch(src, out);
         }
     };
 

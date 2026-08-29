@@ -7,6 +7,7 @@
 #include <fstream>
 #include <cstdint>
 #include "util.hpp"
+#include <boost/algorithm/string.hpp>
 
 namespace ns_index
 {
@@ -130,5 +131,58 @@ namespace ns_index
 
         // 返回刚刚插入的文档的地址
         return &forward_index.back();
+    }
+
+    inline bool Index::BuildInvertedIndex(const DocInfo &doc)
+    {
+        struct WordCnt
+        {
+            int title_cnt;
+            int content_cnt;
+            WordCnt() : title_cnt(0), content_cnt(0) {}
+        };
+
+        // 词频统计映射表
+        std::unordered_map<std::string, WordCnt> word_map;
+
+        // 1. 标题分词与统计
+        std::vector<std::string> title_words;
+        ns_util::JiebaUtil::CutString(doc.title, title_words); // 修复：去掉 & 符号
+
+        // 修复：使用引用 &s，避免海量字符串拷贝
+        for (std::string &s : title_words)
+        {
+            boost::to_lower(s); // 统一转为小写，忽略大小写差异
+            word_map[s].title_cnt++;
+        }
+
+        // 2. 正文分词与统计
+        std::vector<std::string> content_words;
+        ns_util::JiebaUtil::CutString(doc.content, content_words); // 修复：去掉 & 符号
+
+        // 修复：使用引用 &s
+        for (std::string &s : content_words)
+        {
+            boost::to_lower(s);
+            word_map[s].content_cnt++;
+        }
+
+        // 3. 计算权重并构建倒排拉链
+        const int TITLE_WEIGHT = 10;
+        const int CONTENT_WEIGHT = 1;
+
+        for (auto &word_pair : word_map)
+        {
+            InvertedElem elem;
+            elem.doc_id = doc.doc_id;
+            elem.word = word_pair.first;
+            elem.weight = TITLE_WEIGHT * word_pair.second.title_cnt + CONTENT_WEIGHT * word_pair.second.content_cnt;
+
+            // 将节点插入到全局倒排索引的对应拉链中
+            // 优化：使用 std::move 避免 elem 内部 std::string 的拷贝
+            inverted_index[word_pair.first].push_back(std::move(elem));
+        }
+
+        return true;
     }
 } // namespace ns_index
