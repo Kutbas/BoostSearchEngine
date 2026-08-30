@@ -6,8 +6,8 @@
 #include <unordered_map>
 #include <fstream>
 #include <cstdint>
-#include "util.hpp"
 #include <boost/algorithm/string.hpp>
+#include "util.hpp"
 
 namespace ns_index
 {
@@ -34,21 +34,29 @@ namespace ns_index
         std::vector<DocInfo> forward_index;
         std::unordered_map<std::string, InvertedList> inverted_index;
 
-        // 内部辅助函数声明
-        // 按照需求：返回刚刚插入的文档的地址，失败返回 nullptr
-        DocInfo *BuildForwardIndex(const std::string &line);
-
-        // 接收构建好的文档信息，进行分词并构建倒排索引
-        bool BuildInvertedIndex(const DocInfo &doc);
-
-    public:
+        // 1. 私有化构造函数与析构函数
         Index() = default;
         ~Index() = default;
 
+        // 内部辅助函数声明
+        DocInfo *BuildForwardIndex(const std::string &line);
+        bool BuildInvertedIndex(const DocInfo &doc);
+
+    public:
+        // 2. 禁用拷贝构造和赋值运算符
         Index(const Index &) = delete;
         Index &operator=(const Index &) = delete;
 
+        // 3. 获取单例的全局静态接口 (Meyers Singleton)
+        // C++11 保证了局部静态变量在多线程环境下的初始化是绝对安全的
+        static Index *GetInstance()
+        {
+            static Index instance; // 静态局部变量，生命周期随程序，且自动调用析构函数
+            return &instance;      // 返回地址，用法和你的设计完全一致
+        }
+
     public:
+        // 根据 doc_id 找到文档内容 (正排查询)
         DocInfo *GetForwardIndex(uint64_t doc_id)
         {
             if (doc_id >= forward_index.size())
@@ -59,6 +67,7 @@ namespace ns_index
             return &forward_index[doc_id];
         }
 
+        // 根据关键字 word，获得倒排拉链 (倒排查询)
         InvertedList *GetInvertedList(const std::string &word)
         {
             auto iter = inverted_index.find(word);
@@ -69,6 +78,7 @@ namespace ns_index
             return &(iter->second);
         }
 
+        // 构建索引
         bool BuildIndex(const std::string &input)
         {
             std::ifstream in(input, std::ios::in | std::ios::binary);
@@ -82,7 +92,6 @@ namespace ns_index
             int count = 0;
             while (std::getline(in, line))
             {
-                // 3. 构建正排索引，拿到刚刚插入的文档地址
                 DocInfo *doc = BuildForwardIndex(line);
                 if (doc == nullptr)
                 {
@@ -90,9 +99,7 @@ namespace ns_index
                     continue;
                 }
 
-                // 4. 构建倒排索引 (直接解引用传入)
                 BuildInvertedIndex(*doc);
-
                 count++;
                 if (count % 50 == 0)
                 {
@@ -112,12 +119,11 @@ namespace ns_index
         std::vector<std::string> results;
         const std::string sep = "\3";
 
-        // 注意：这里去掉了 & 符号，配合上一节 util.hpp 的引用修改
         ns_util::StringUtil::CutString(line, results, sep);
 
         if (results.size() != 3)
         {
-            return nullptr; // 解析失败返回 nullptr
+            return nullptr;
         }
 
         DocInfo doc;
@@ -126,10 +132,8 @@ namespace ns_index
         doc.url = results[2];
         doc.doc_id = forward_index.size();
 
-        // 插入到正排索引中
         forward_index.push_back(std::move(doc));
 
-        // 返回刚刚插入的文档的地址
         return &forward_index.back();
     }
 
@@ -142,25 +146,22 @@ namespace ns_index
             WordCnt() : title_cnt(0), content_cnt(0) {}
         };
 
-        // 词频统计映射表
         std::unordered_map<std::string, WordCnt> word_map;
 
         // 1. 标题分词与统计
         std::vector<std::string> title_words;
-        ns_util::JiebaUtil::CutString(doc.title, title_words); // 修复：去掉 & 符号
+        ns_util::JiebaUtil::CutString(doc.title, title_words);
 
-        // 修复：使用引用 &s，避免海量字符串拷贝
         for (std::string &s : title_words)
         {
-            boost::to_lower(s); // 统一转为小写，忽略大小写差异
+            boost::to_lower(s);
             word_map[s].title_cnt++;
         }
 
         // 2. 正文分词与统计
         std::vector<std::string> content_words;
-        ns_util::JiebaUtil::CutString(doc.content, content_words); // 修复：去掉 & 符号
+        ns_util::JiebaUtil::CutString(doc.content, content_words);
 
-        // 修复：使用引用 &s
         for (std::string &s : content_words)
         {
             boost::to_lower(s);
@@ -178,8 +179,6 @@ namespace ns_index
             elem.word = word_pair.first;
             elem.weight = TITLE_WEIGHT * word_pair.second.title_cnt + CONTENT_WEIGHT * word_pair.second.content_cnt;
 
-            // 将节点插入到全局倒排索引的对应拉链中
-            // 优化：使用 std::move 避免 elem 内部 std::string 的拷贝
             inverted_index[word_pair.first].push_back(std::move(elem));
         }
 
