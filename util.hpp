@@ -37,10 +37,12 @@ namespace ns_util
     class StringUtil
     {
     public:
-        // 1. 将 out 改为引用类型 std::vector<std::string>&
-        static void CutString(const std::string &target, std::vector<std::string> &out, const std::string &sep)
+        // 重命名为 SplitStr，避免歧义
+        // 坚持使用引用参数 &out
+        static void SplitStr(const std::string &target, std::vector<std::string> &out, const std::string &sep)
         {
-            boost::split(out, target, boost::is_any_of(sep), boost::token_compress_on);
+            // 坚守 token_compress_off，防御字段为空时被压缩导致的数据错位
+            boost::split(out, target, boost::is_any_of(sep), boost::token_compress_off);
         }
     };
 
